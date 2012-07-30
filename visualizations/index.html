@@ -96,6 +96,38 @@
         text-decoration: none;
         background-color: #FFFFFF;
       }
+      
+      
+      .geosearch-container {
+        margin-top: 5px;
+        margin-left: 10px;
+        -moz-border-radius: 7px;
+        -webkit-border-radius: 7px;
+        border-radius: 7px;
+        padding: 5px;
+        background: rgba(0, 0, 0, 0.25);
+        float: left;
+        clear: both;
+        position: relative;
+        z-index: 7;
+      }
+      
+      .geosearch-container-inner {
+        -moz-border-radius: 4px;
+        -webkit-border-radius: 4px;
+        border-radius: 4px;
+        background-color: rgba(255, 255, 255, 0.9);
+      }
+      
+      .geosearch-search-container {
+        padding: 1em;
+      }
+      
+      .geosearch-current-container {
+        text-align: right;
+        margin-bottom: 1em;
+        margin-top: .5em;
+      }
     </style>
     
     <!--[if lte IE 8]>
@@ -115,9 +147,18 @@
     <!-- Templates to be used in client side processing. -->
     <script id="template-geosearch" type="text/template">
       <div class="geosearch-container">
-        <a class="geosearch-container-toggle">G</a>
-        <div class="">
-        
+        <div class="geosearch-container-inner">
+          <a href="#" class="geosearch-container-toggle">G</a>
+          <div class="geosearch-search-container">
+            <form id="geosearch-form">
+              <label for="address" class="geosearch-label">Search by address:</label>
+              <input class="geosearch-input form-text" type="text" id="address" name="address" value="" />
+              <input class="geosearch-submit form-submit" type="submit" value="Search">
+            </form>
+            <div class="geosearch-current-container">
+              <a href="#" class="geosearch-current-location hide">Use my current location instead</a>
+            </div>
+          </div>
         </div>
       </div>
     </script>
@@ -159,6 +200,7 @@
             
             MyBoundariesApp.prototype.launch = function() {
               this.makeMap();
+              this.addGeoSearch();
             };
             
             MyBoundariesApp.prototype.makeMap = function() {
@@ -181,6 +223,57 @@
           		  e.preventDefault();
           		  thisApp.map.setView(new L.LatLng(44.98, -93.18), 10);
           		});
+            };
+            
+            MyBoundariesApp.prototype.addGeoSearch = function() {
+              var thisApp = this;
+              
+              $('#map .leaflet-top.leaflet-left')
+                .append(_.template($('#template-geosearch').html(), {}));
+                
+              // Creat marker
+              thisApp.marker = new L.Marker(new L.LatLng(0, 0), { draggable: true });
+              thisApp.map.addLayer(thisApp.marker);
+              thisApp.marker.on('dragend', function() {
+                thisApp.setPosition(thisApp.marker.getLatLng());
+              });
+                
+              // Create opener
+              $('.geosearch-container-toggle').click(function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                $('.geosearch-container').toggleClass('collapsed');
+                $('.geosearch-search-container').toggle('fast');
+              });
+              
+              // Geolocate, check if capable first
+              if (navigator !== undefined && navigator.geolocation !== undefined) {
+                $('.geosearch-current-location').show().removeClass('hide')
+                  .click(function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    navigator.geolocation.getCurrentPosition(
+                      function(position) {
+                        thisApp.setPosition(position.coords.latitude, position.coords.longitude);
+                      },
+                      function(postition) {
+                        // Handle error
+                      }
+                    );
+                  });
+              }
+            };
+            
+            MyBoundariesApp.prototype.setPosition = function(lat, lon) {
+              // if lat is defined, but not lon, assume its a LatLon object
+              if (lat !== undefined && lon === undefined) {
+                this.position = lat;
+              }
+              else {
+                this.position = new L.LatLng(lat, lon);
+              }
+              
+              this.marker.setLatLng(this.position);
             };
             
             MyBoundariesApp.prototype.dataDir = function() {
