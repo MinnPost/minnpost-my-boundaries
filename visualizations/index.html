@@ -258,7 +258,9 @@
         
         <ul>
           <% for (var i in boundaries) { %>
-            <li><a href="#" class="<%= i %>" data-boundary="<%= i %>"><%= meta[i].title %></a></li>
+            <li><a href="#" class="<%= i %>" data-boundary="<%= i %>">
+              <%= meta[i].title %> (<%= boundaries[i].name %>)
+            </a></li>
           <% } %>
         </ul>
 
@@ -267,7 +269,9 @@
           <select type="select" class="form-select" id="boundary-add" name="boundary-add">
             <option value="none">(none)</option>
             <% for (var i in meta) { %>
-              <option value="<%= i %>"><%= meta[i].title %></option>
+              <% if (boundaries[i] === undefined) { %>
+                <option value="<%= i %>"><%= meta[i].title %></option>
+              <% } %>
             <% } %>
           </select>
         </form>
@@ -312,7 +316,13 @@
                 'state-house-districts-2012': { 'title': 'State House 2012' },
                 'state-house-districts-2002': { 'title': 'State House 2002' },
                 'state-senate-districts-2012': { 'title': 'State Senate 2012' },
-                'state-senate-districts-2002': { 'title': 'State Senate 2002' }
+                'state-senate-districts-2002': { 'title': 'State Senate 2002' },
+                'congressional-districts-2002': { 'title': 'Congressional district 2002' },
+                'congressional-districts-2012': { 'title': 'Congressional district 2012' },
+                'counties-2010': { 'title': 'County' },
+                'minor-civil-divisions-2010': { 'title': 'Civil Divison (towns, cities)' },
+                'neighborhoods-2012': { 'title': 'Neighborhood' },
+                'voting-precincts-2012': { 'title': 'Voting Precinct 2012' }
               };
               this.boundaryDefault = 'state-house-districts-2012';
               this.highlightStyle = {
@@ -335,14 +345,13 @@
             
             MyBoundariesApp.prototype.makeMap = function() {
               var thisApp = this;
-              var center = new L.LatLng(45.008505958683955, -93.197021484375);
               
               this.map = new L.Map('map', {
                 minZoom: 4,
                 maxZoom: 18,
                 attributionControl: false
               });
-              this.map.setView(center, 10);
+              this.map.setView(new L.LatLng(46.1494, -92.4495), 6);
               this.map.addControl(new L.Control.Fullscreen());
               this.map.addLayer(this.tiles);
               
@@ -462,7 +471,12 @@
                 }
               }
               
-              set = (set === undefined || set === null) ? set = thisApp.boundaryDefault : set;
+              if ((set === undefined || set === null) && thisApp.highlightedSet !== undefined) {
+                set = thisApp.highlightedSet;
+              } 
+              else if ((set === undefined || set === null) && thisApp.highlightedSet === undefined) {
+                set = thisApp.boundaryDefault;
+              }
               var url = thisApp.boundaryHost + 'boundary/?sets=' + set + '&contains=' + 
                 thisApp.position.lat + ',' + thisApp.position.lng + '&callback=?';
                 
@@ -492,9 +506,14 @@
                 thisApp.highlightBoundary($(this).attr('data-boundary'));
               });
               
+              // Work around for Chrome
               $('#boundary-add').click(function(e) { $(this).focus(); });
               $('.boundaries-container').bind('mousedown', function(e) {
                 e.stopPropagation();
+              });
+              
+              $('#boundary-add').change(function(e) { 
+                thisApp.getBoundary($(this).val());
               });
             };
             
