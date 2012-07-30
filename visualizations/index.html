@@ -62,6 +62,10 @@
         height: 500px;
       }
       
+      .leaflet-container a {
+        color: #801019;
+      }
+      
       .leaflet-control-zoom + .metro-button-container,
       .leaflet-control-fullscreen + .metro-button-container {
         margin-top: 5px;
@@ -128,6 +132,19 @@
         margin-bottom: 1em;
         margin-top: .5em;
       }
+      
+      .message-container {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 9999;
+      }
+      .message-container .message {
+        margin: 3px auto;
+        max-width: 75%;
+        text-align: center;
+      }
     </style>
     
     <!--[if lte IE 8]>
@@ -168,6 +185,17 @@
         <a href="#" title="Click to zoom to the Twin Cities metro area." class="metro-button">G</a>
       </div>
     </script>
+    
+    <script id="template-message-container" type="text/template">
+      <div class="message-container">
+      </div>
+    </script>
+    
+    <script id="template-message" type="text/template">
+      <div class="<%= type %> message">
+        <%= message %>
+      </div>
+    </script>
   
     <!-- jQuery if it is not there and jQueryCustom for Backbone --><!-- jQuery -->
     <script type="text/javascript">
@@ -195,6 +223,11 @@
               this.tiles = new L.TileLayer(
                 'http://{s}.tile.stamen.com/toner-lite/{z}/{x}/{y}.jpg', 
                 { subdomains: ['a', 'b', 'c', 'd'] }
+              );
+              this.geocodeQuery = 'http://open.mapquestapi.com/nominatim/v1/search?format=json&json_callback=?&countrycodes=us&limit=1&q=';
+              this.mnBounds = new L.LatLngBounds(
+                new L.LatLng(43.499356, -97.239209), 
+                new L.LatLng(49.384358, -89.489226)
               );
             }
             
@@ -246,18 +279,48 @@
                 $('.geosearch-search-container').toggle('fast');
               });
               
+              // Geosearch by form
+              $('form#geosearch-form').submit(function(e) {
+                e.preventDefault();
+                var address = $('input.geosearch-input').val();
+                if (!address) return;
+                
+                // Geocode with Mapquest
+                thisApp.message();
+                $.getJSON(thisApp.geocodeQuery + encodeURI(address), function(value) {
+                  // Use first response
+                  value = value[0];
+                  if (value === undefined) {
+                    thisApp.message('We were unable turn your search terms, ' + request + ', into a geographical location.  Please be more specific, such as including ZIP code.', 'error');
+                  }
+                  // Check we are still mostly in Minnesota
+                  else if (!thisApp.mnBounds.contains(new L.LatLng(value.lat, value.lon))) {
+                    thisApp.message('Sorry, but what you are looking for is outside of Minnesota.', 'error');
+                  }
+                  else {
+                    thisApp.message('clear');
+                    $('.geosearch-container-toggle').click();
+                    thisApp.setPosition(value.lat, value.lon);
+                  }
+                });
+              });
+              
               // Geolocate, check if capable first
               if (navigator !== undefined && navigator.geolocation !== undefined) {
                 $('.geosearch-current-location').show().removeClass('hide')
                   .click(function(e) {
                     e.preventDefault();
                     e.stopPropagation();
+                    
+                    thisApp.message();
                     navigator.geolocation.getCurrentPosition(
                       function(position) {
                         thisApp.setPosition(position.coords.latitude, position.coords.longitude);
+                        $('.geosearch-container-toggle').click();
+                        thisApp.message('clear');
                       },
                       function(postition) {
-                        // Handle error
+                        thisApp.message('There was an error when trying to find your location.', 'error');
                       }
                     );
                   });
@@ -274,6 +337,26 @@
               }
               
               this.marker.setLatLng(this.position);
+              this.map.panTo(this.position);
+            };
+            
+            MyBoundariesApp.prototype.message = function(message, type) {
+              message = (message === undefined) ? 'Loading...' : message;
+              type = (type === undefined) ? 'status' : type;
+              
+              if ($('.message-container').length == 0) {
+                $('#map').append(_.template($('#template-message-container').html(), {}));
+              }
+              
+              if (message == 'clear') {
+                $('.message-container').html('');
+                return;
+              }
+              
+              $('.message-container').html(_.template($('#template-message').html(), {
+                'message': message,
+                'type': type
+              }));
             };
             
             MyBoundariesApp.prototype.dataDir = function() {
