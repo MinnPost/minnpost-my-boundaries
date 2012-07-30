@@ -163,6 +163,9 @@
       .boundaries-container-inner {
         padding: 1em;
       }
+      .boundaries-container li a.selected {
+        font-weight: bold;
+      }
       
       .geosearch-search-container {
         padding: 1em;
@@ -179,12 +182,16 @@
         top: 0;
         left: 0;
         right: 0;
-        z-index: 999999;
+        z-index: 99999;
       }
       .message-container .message {
         margin: 3px auto;
         max-width: 75%;
         text-align: center;
+      }
+      
+      #boundary-add {
+        z-index: 9999;
       }
     </style>
     
@@ -211,7 +218,7 @@
             <form id="geosearch-form">
               <label for="address" class="geosearch-label">Search by address:</label>
               <input class="geosearch-input form-text" type="text" id="address" name="address" value="" />
-              <input class="geosearch-submit form-submit" type="submit" value="Search">
+              <input class="geosearch-submit form-submit" type="submit" value="Search" />
             </form>
             <div class="geosearch-current-container">
               <a href="#" class="geosearch-current-location hide">Use my current location instead</a>
@@ -223,7 +230,7 @@
     
     <script id="template-metro-button" type="text/template">
       <div class="metro-button-container">
-        <a href="#" title="Click to zoom to the Twin Cities metro area." class="metro-button">G</a>
+        <a href="#" title="Click to zoom to the Twin Cities metro area." class="metro-button"></a>
       </div>
     </script>
     
@@ -251,9 +258,19 @@
         
         <ul>
           <% for (var i in boundaries) { %>
-            <li><a href="#" data-boundary="<%= i %>"><%= meta[i].title %></a></li>
+            <li><a href="#" class="<%= i %>" data-boundary="<%= i %>"><%= meta[i].title %></a></li>
           <% } %>
         </ul>
+
+        <form id="boundary-add-form">
+          <label for="boundary-add">Add boundary:</label>
+          <select type="select" class="form-select" id="boundary-add" name="boundary-add">
+            <option value="none">(none)</option>
+            <% for (var i in meta) { %>
+              <option value="<%= i %>"><%= meta[i].title %></option>
+            <% } %>
+          </select>
+        </form>
       </div>
     </script>
   
@@ -295,12 +312,23 @@
                 'state-house-districts-2012': { 'title': 'State House 2012' },
                 'state-house-districts-2002': { 'title': 'State House 2002' },
                 'state-senate-districts-2012': { 'title': 'State Senate 2012' },
-                'state-senate-districts-2002': { 'title': 'State Senat 2002' }
+                'state-senate-districts-2002': { 'title': 'State Senate 2002' }
               };
               this.boundaryDefault = 'state-house-districts-2012';
+              this.highlightStyle = {
+                'color': '#801019',
+                'weight': 3,
+                'opacity': 0.9,
+                'fill': true,
+                'fillColor': '#801019',
+                'fillOpacity': 0.5
+              };
             }
             
             MyBoundariesApp.prototype.launch = function() {
+              // Do some binding
+              _.bindAll(this, ['buildBoundaryDisplay'])
+            
               this.makeMap();
               this.addGeoSearch();
             };
@@ -346,6 +374,17 @@
                 e.stopPropagation();
                 $('.geosearch-container').toggleClass('collapsed');
                 $('.geosearch-search-container').toggle('fast');
+              });
+              
+              $('#map').click(function(e) {
+                $(this).focus();
+              });
+              $('.geosearch-input').click(function(e) {
+                $(this).focus();
+              });
+              $('.geosearch-container').bind('mousedown', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
               });
               
               // Geosearch by form
@@ -429,17 +468,59 @@
                 
               thisApp.message();
               $.getJSON(url, function(data) {
-                console.log(data);
                 thisApp.message('clear');
                 
                 if (data.objects.length > 0) {
                   thisApp.boundaries[set] = data.objects[0];
-                  $('.boundaries-container').html(_.template(
-                    $('#template-boundaries').html(), 
-                      { 'boundaries': thisApp.boundaries, 'meta': thisApp.boundaryMeta }
-                    ));
+                  thisApp.buildBoundaryDisplay();
+                  thisApp.highlightBoundary(set);
                 }
               })
+            };
+            
+            MyBoundariesApp.prototype.buildBoundaryDisplay = function() {
+              var thisApp = this;
+              
+              $('.boundaries-container').html(_.template(
+                $('#template-boundaries').html(), 
+                  { 'boundaries': this.boundaries, 'meta': this.boundaryMeta }
+                ));
+                
+              $('.boundaries-container ul a').unbind('click');
+              $('.boundaries-container ul a').click(function(e) {
+                e.preventDefault();
+                thisApp.highlightBoundary($(this).attr('data-boundary'));
+              });
+              
+              $('#boundary-add').click(function(e) { $(this).focus(); });
+              $('.boundaries-container').bind('mousedown', function(e) {
+                e.stopPropagation();
+              });
+            };
+            
+            MyBoundariesApp.prototype.highlightBoundary = function(set) {
+              var thisApp = this;
+              if (set === undefined || thisApp.boundaries[set] === undefined) {
+                return;
+              }
+              
+              if (thisApp.highlighter !== undefined) {
+                thisApp.map.removeLayer(thisApp.highlighter);
+              }
+              
+              var geojson = {
+                'type': 'Feature',
+                'geometry': thisApp.boundaries[set].simple_shape
+              }
+              thisApp.highlightedSet = set;
+              thisApp.highlighter = new L.GeoJSON(geojson);
+              thisApp.highlighter.setStyle(thisApp.highlightStyle);
+              thisApp.map.addLayer(thisApp.highlighter);
+              
+              thisApp.map.fitBounds(thisApp.highlighter.getBounds());
+              
+              $('.boundaries-container li a.selected').removeClass('selected');
+              $('.boundaries-container li a.' + set).addClass('selected');
             };
             
             MyBoundariesApp.prototype.message = function(message, type) {
