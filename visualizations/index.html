@@ -101,6 +101,21 @@
         background-color: #FFFFFF;
       }
       
+      .geosearch-container-toggle {
+        display: block;
+        display: inline-block;
+        vertical-align: text-top;
+        width: 19px;
+        height: 19px;
+        background-image: url("https://s3.amazonaws.com/data.minnpost/js/bootstrap-2.0.3/img/glyphicons-halflings.png");
+        background-repeat: no-repeat;
+        background-position: -46px 2px;
+        cursor: pointer;
+      }
+      .geosearch-container-toggle:hover {
+        text-decoration: none;
+        background-color: #FFFFFF;
+      }
       
       .geosearch-container {
         margin-top: 5px;
@@ -123,6 +138,32 @@
         background-color: rgba(255, 255, 255, 0.9);
       }
       
+      .boundaries-container-outer {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        bottom: 10px;
+        -moz-border-radius: 7px;
+        -webkit-border-radius: 7px;
+        border-radius: 7px;
+        padding: 5px;
+        background: rgba(0, 0, 0, 0.25);
+        z-index: 9999;
+        width: 25%;
+      }
+      
+      .boundaries-container {
+        -moz-border-radius: 4px;
+        -webkit-border-radius: 4px;
+        border-radius: 4px;
+        background-color: rgba(255, 255, 255, 0.9);
+        width: 100%;
+        height: 100%;
+      }
+      .boundaries-container-inner {
+        padding: 1em;
+      }
+      
       .geosearch-search-container {
         padding: 1em;
       }
@@ -138,7 +179,7 @@
         top: 0;
         left: 0;
         right: 0;
-        z-index: 9999;
+        z-index: 999999;
       }
       .message-container .message {
         margin: 3px auto;
@@ -165,7 +206,7 @@
     <script id="template-geosearch" type="text/template">
       <div class="geosearch-container">
         <div class="geosearch-container-inner">
-          <a href="#" class="geosearch-container-toggle">G</a>
+          <a href="#" title="Toggle the address search form." class="geosearch-container-toggle"></a>
           <div class="geosearch-search-container">
             <form id="geosearch-form">
               <label for="address" class="geosearch-label">Search by address:</label>
@@ -194,6 +235,25 @@
     <script id="template-message" type="text/template">
       <div class="<%= type %> message">
         <%= message %>
+      </div>
+    </script>
+    
+    <script id="template-boundaries-container" type="text/template">
+      <div class="boundaries-container-outer">
+        <div class="boundaries-container">
+        </div>
+      </div>
+    </script>
+    
+    <script id="template-boundaries" type="text/template">
+      <div class="boundaries-container-inner">
+        <h3>Boundaries</h3>
+        
+        <ul>
+          <% for (var i in boundaries) { %>
+            <li><a href="#" data-boundary="<%= i %>"><%= meta[i].title %></a></li>
+          <% } %>
+        </ul>
       </div>
     </script>
   
@@ -229,6 +289,15 @@
                 new L.LatLng(43.499356, -97.239209), 
                 new L.LatLng(49.384358, -89.489226)
               );
+              this.boundaryHost = 'http://boundaries.minnpost.com/1.0/';
+              this.boundaries = {};
+              this.boundaryMeta = {
+                'state-house-districts-2012': { 'title': 'State House 2012' },
+                'state-house-districts-2002': { 'title': 'State House 2002' },
+                'state-senate-districts-2012': { 'title': 'State Senate 2012' },
+                'state-senate-districts-2002': { 'title': 'State Senat 2002' }
+              };
+              this.boundaryDefault = 'state-house-districts-2012';
             }
             
             MyBoundariesApp.prototype.launch = function() {
@@ -315,9 +384,9 @@
                     thisApp.message();
                     navigator.geolocation.getCurrentPosition(
                       function(position) {
+                        thisApp.message('clear');
                         thisApp.setPosition(position.coords.latitude, position.coords.longitude);
                         $('.geosearch-container-toggle').click();
-                        thisApp.message('clear');
                       },
                       function(postition) {
                         thisApp.message('There was an error when trying to find your location.', 'error');
@@ -338,13 +407,46 @@
               
               this.marker.setLatLng(this.position);
               this.map.panTo(this.position);
+              this.getBoundary(null, true);
+            };
+            
+            MyBoundariesApp.prototype.getBoundary = function(set, reset) {
+              var thisApp = this;
+              if (this.position === undefined) {
+                return;
+              }
+
+              if (reset === true) {
+                thisApp.boundaries = {};
+                if ($('.boundaries-container').length === 0) {
+                  $('#map').append(_.template($('#template-boundaries-container').html(), {}));
+                }
+              }
+              
+              set = (set === undefined || set === null) ? set = thisApp.boundaryDefault : set;
+              var url = thisApp.boundaryHost + 'boundary/?sets=' + set + '&contains=' + 
+                thisApp.position.lat + ',' + thisApp.position.lng + '&callback=?';
+                
+              thisApp.message();
+              $.getJSON(url, function(data) {
+                console.log(data);
+                thisApp.message('clear');
+                
+                if (data.objects.length > 0) {
+                  thisApp.boundaries[set] = data.objects[0];
+                  $('.boundaries-container').html(_.template(
+                    $('#template-boundaries').html(), 
+                      { 'boundaries': thisApp.boundaries, 'meta': thisApp.boundaryMeta }
+                    ));
+                }
+              })
             };
             
             MyBoundariesApp.prototype.message = function(message, type) {
               message = (message === undefined) ? 'Loading...' : message;
               type = (type === undefined) ? 'status' : type;
               
-              if ($('.message-container').length == 0) {
+              if ($('.message-container').length === 0) {
                 $('#map').append(_.template($('#template-message-container').html(), {}));
               }
               
