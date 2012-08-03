@@ -32,7 +32,7 @@
   <!-- START: Embeddable -->
   <div class="node-body fieldlayout node-field-body">
     <style type="text/css">
-      @import url('https://s3.amazonaws.com/data.minnpost/js/leaflet-master-20120531/leaflet.css');
+      @import url('https://s3.amazonaws.com/data.minnpost/js/leaflet-0.4.2/leaflet.css');
       @import url('https://s3.amazonaws.com/data.minnpost/js/leaflet-addons-master-20120531/leaflet-addons.css');
     </style>
     
@@ -72,6 +72,7 @@
       }
       
       .metro-button-container {
+        margin-top: 103px;
         margin-left: 10px;
         -moz-border-radius: 7px;
         -webkit-border-radius: 7px;
@@ -197,8 +198,8 @@
     
     <!--[if lte IE 8]>
       <style type="text/css">
-      	@import url('https://s3.amazonaws.com/data.minnpost/js/leaflet-master-20120531/leaflet.ie.css');
-      	@import url('https://s3.amazonaws.com/data.minnpost/js/leaflet-addons-master-20120531/leaflet-addons.ie.css');
+        @import url('https://s3.amazonaws.com/data.minnpost/js/leaflet-0.4.2/leaflet.ie.css');
+        @import url('https://s3.amazonaws.com/data.minnpost/js/leaflet-addons-master-20120531/leaflet-addons.ie.css');
       </style>
     <![endif]-->
     
@@ -283,7 +284,7 @@
       window.jQuery || document.write('<script type="text/javascript" src="https://s3.amazonaws.com/data.minnpost/js/jquery-1.7.2/jquery-1.7.2.min.js"><\/script>')
     </script>
     <!-- Leaflet and wax for mapping -->
-    <script type="text/javascript" src="https://s3.amazonaws.com/data.minnpost/js/leaflet-master-20120531/leaflet.js"></script>
+    <script type="text/javascript" src="https://s3.amazonaws.com/data.minnpost/js/leaflet-0.4.2/leaflet.js"></script>
     <script type="text/javascript" src="https://s3.amazonaws.com/data.minnpost/js/leaflet-addons-master-20120531/leaflet-addons.min.js"></script>
     <script type="text/javascript" src="https://s3.amazonaws.com/data.minnpost/js/leaflet-bing/TileLayer.Bing.js"></script>
     <!-- Underscore -->
@@ -333,6 +334,18 @@
                 'fillColor': '#801019',
                 'fillOpacity': 0.5
               };
+              this.defaultMapCenterOffset = {
+                x: 50,
+                y: 0
+              };
+              this.defaultMapNEOffset = {
+                x: 50,
+                y: 0
+              };
+              this.defaultMapSWOffset = {
+                x: 0,
+                y: 0
+              };
             }
             
             MyBoundariesApp.prototype.launch = function() {
@@ -351,23 +364,24 @@
                 maxZoom: 18,
                 attributionControl: false
               });
-              this.map.setView(new L.LatLng(46.1494, -92.4495), 6);
+              this.extendMap();
+              this.map.appSetView(new L.LatLng(46.1494, -92.4495), 6);
               this.map.addControl(new L.Control.Fullscreen());
               this.map.addLayer(this.tiles);
               
               // Add metro zoom button// Add metro area button
-              $('#map .leaflet-top.leaflet-left')
+              $('#map')
                 .append(_.template($('#template-metro-button').html(), {}));
-          		$('.metro-button').click(function(e) {
-          		  e.preventDefault();
-          		  thisApp.map.setView(new L.LatLng(44.98, -93.18), 10);
-          		});
+              $('.metro-button').click(function(e) {
+                e.preventDefault();
+                thisApp.map.appSetView(new L.LatLng(44.98, -93.18), 10);
+              });
             };
             
             MyBoundariesApp.prototype.addGeoSearch = function() {
               var thisApp = this;
               
-              $('#map .leaflet-top.leaflet-left')
+              $('#map')
                 .append(_.template($('#template-geosearch').html(), {}));
                 
               // Creat marker
@@ -385,9 +399,6 @@
                 $('.geosearch-search-container').toggle('fast');
               });
               
-              $('#map').click(function(e) {
-                $(this).focus();
-              });
               $('.geosearch-input').click(function(e) {
                 $(this).focus();
               });
@@ -536,10 +547,65 @@
               thisApp.highlighter.setStyle(thisApp.highlightStyle);
               thisApp.map.addLayer(thisApp.highlighter);
               
-              thisApp.map.fitBounds(thisApp.highlighter.getBounds());
+              thisApp.map.appFitBounds(thisApp.highlighter.getBounds());
               
               $('.boundaries-container li a.selected').removeClass('selected');
               $('.boundaries-container li a.' + set).addClass('selected');
+            };
+            
+            MyBoundariesApp.prototype.extendMap = function() {
+              var thisApp = this;
+              
+              // Adding helpful functions for map
+              thisApp.map.appSetView = function(latlng, z, offset) {
+                offset = (offset === undefined) ? thisApp.defaultMapCenterOffset : offset;
+
+                var targetPoint = this.project(latlng, z).add(offset);
+                var targetLatLng = this.unproject(targetPoint, z);
+                this.setView(targetLatLng, z);
+              };
+              
+              thisApp.map.appFitBounds = function(bounds) {
+                var zoom = this.appGetBoundsZoom(bounds);
+                return this.appSetView(L.latLngBounds(bounds).getCenter(), zoom);
+              };
+              
+              thisApp.map.appGetBoundsZoom = function(bounds, inside) {
+                bounds = L.latLngBounds(bounds);
+
+                var size = this.getSize(),
+                  zoom = this.options.minZoom || 0,
+                  maxZoom = this.getMaxZoom(),
+                  ne = bounds.getNorthEast(),
+                  sw = bounds.getSouthWest(),
+                  boundsSize,
+                  nePoint,
+                  swPoint,
+                  zoomNotFound = true;
+            
+                if (inside) {
+                  zoom--;
+                }
+            
+                do {
+                  zoom++;
+                  nePoint = this.project(ne, zoom).add(thisApp.defaultMapNEOffset);
+                  swPoint = this.project(sw, zoom).add(thisApp.defaultMapSWOffset);
+                  boundsSize = new L.Point(Math.abs(nePoint.x - swPoint.x), Math.abs(swPoint.y - nePoint.y));
+            
+                  if (!inside) {
+                    zoomNotFound = boundsSize.x <= size.x && boundsSize.y <= size.y;
+                  } else {
+                    zoomNotFound = boundsSize.x < size.x || boundsSize.y < size.y;
+                  }
+                } while (zoomNotFound && zoom <= maxZoom);
+            
+                if (zoomNotFound && inside) {
+                  return null;
+                }
+            
+                return inside ? zoom : zoom - 1;
+              };
             };
             
             MyBoundariesApp.prototype.message = function(message, type) {
